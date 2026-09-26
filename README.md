@@ -1,6 +1,3 @@
-[README.MD](https://github.com/user-attachments/files/32671634/README.MD)
-# ProjetoAplicadoII
-Hub para o Projeto aplicado II
 # Projeto Aplicado II - Olist
 
 Projeto desenvolvido para a disciplina Projeto Aplicado II do curso de Ciência de Dados.
