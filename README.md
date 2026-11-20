@@ -43,3 +43,10 @@ trabalho/
 │   └── modelo.py
 ├── README.MD
 └── requirements.txt
+```
+
+## Etapa 4
+
+- [Vídeo da apresentação no YouTube](https://youtu.be/ZexOqW72H5Y)
+- [Relatório técnico final](entrega_etapa_4/Relatorio_Tecnico_Etapa_4_Olist.pdf)
+- [Apresentação de Data Storytelling](entrega_etapa_4/Apresentacao_Etapa_4.pptx)

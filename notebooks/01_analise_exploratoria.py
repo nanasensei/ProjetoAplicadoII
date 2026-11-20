@@ -148,16 +148,16 @@ pedidos_entregues = pedidos[
 ].copy()
 
 
-# Remove registros sem data real de entrega
+# Só é possível comparar pedidos com as duas datas preenchidas.
 pedidos_entregues = pedidos_entregues.dropna(
-    subset=["order_delivered_customer_date"]
+    subset=["order_delivered_customer_date", "order_estimated_delivery_date"]
 )
 
 
-# Cria coluna informando se houve atraso
+# O prazo inclui todo o dia prometido, independentemente da hora da entrega.
 pedidos_entregues["atrasado"] = (
-    pedidos_entregues["order_delivered_customer_date"]
-    > pedidos_entregues["order_estimated_delivery_date"]
+    pedidos_entregues["order_delivered_customer_date"].dt.normalize()
+    > pedidos_entregues["order_estimated_delivery_date"].dt.normalize()
 )
 
 
@@ -189,22 +189,30 @@ print(
 # E AVALIAÇÃO
 # =========================
 
+# Cada pedido recebe o mesmo peso. Em pedidos com mais de uma avaliação,
+# usa-se a avaliação respondida mais recentemente.
+avaliacoes_por_pedido = (
+    avaliacoes.assign(
+        review_answer_timestamp=pd.to_datetime(
+            avaliacoes["review_answer_timestamp"]
+        )
+    )
+    .sort_values(["review_answer_timestamp", "review_id"], na_position="first")
+    .drop_duplicates(subset="order_id", keep="last")
+)
+
 base_atraso_avaliacao = pedidos_entregues.merge(
-    avaliacoes[
-        [
-            "order_id",
-            "review_score"
-        ]
-    ],
+    avaliacoes_por_pedido[["order_id", "review_score"]],
     on="order_id",
-    how="inner"
+    how="inner",
+    validate="one_to_one",
 )
 
 
 print("\n===== RELAÇÃO ENTRE ATRASO E AVALIAÇÃO =====")
 
 print(
-    "Quantidade de registros após a junção:",
+    "Quantidade de pedidos com avaliação:",
     len(base_atraso_avaliacao)
 )
 
@@ -256,9 +264,12 @@ print(
 # NOTAS POR ATRASO
 # =========================
 
-tabela_notas.plot(
-    kind="bar"
-)
+contagem_por_prazo = base_atraso_avaliacao["atrasado"].value_counts()
+rotulos_prazo = {
+    False: f"No prazo (n={contagem_por_prazo.get(False, 0):,})".replace(",", "."),
+    True: f"Em atraso (n={contagem_por_prazo.get(True, 0):,})".replace(",", "."),
+}
+tabela_notas.rename(columns=rotulos_prazo).plot(kind="bar")
 
 plt.title(
     "Distribuição das notas por atraso na entrega"
@@ -269,19 +280,14 @@ plt.xlabel(
 )
 
 plt.ylabel(
-    "Percentual"
+    "Percentual de pedidos avaliados no grupo (%)"
 )
 
 plt.xticks(
     rotation=0
 )
 
-plt.legend(
-    [
-        "No prazo",
-        "Atrasado"
-    ]
-)
+plt.legend(title="Entrega")
 
 plt.tight_layout()
 

@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from sklearn.metrics import precision_recall_fscore_support
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import StratifiedGroupKFold
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
@@ -108,13 +108,47 @@ y = dados[
 # DIVISÃO TREINO E TESTE
 # =========================
 
-X_treino, X_teste, y_treino, y_teste = train_test_split(
-    X,
-    y,
-    test_size=0.20,
-    random_state=42,
-    stratify=y
+def agrupar_avaliacoes(dados):
+    # Une as linhas que compartilham um texto, pedido ou ID de avaliação.
+    # A união é transitiva: todos os registros ligados ficam no mesmo grupo.
+    raiz = list(range(len(dados)))
+
+    def encontrar(indice):
+        while raiz[indice] != indice:
+            raiz[indice] = raiz[raiz[indice]]
+            indice = raiz[indice]
+        return indice
+
+    for coluna in ("texto_processado", "order_id", "review_id"):
+        primeira_ocorrencia = {}
+        for indice, valor in enumerate(dados[coluna]):
+            if pd.isna(valor):
+                continue
+            primeiro = primeira_ocorrencia.setdefault(valor, indice)
+            raiz[encontrar(indice)] = encontrar(primeiro)
+
+    return [encontrar(indice) for indice in range(len(dados))]
+
+
+grupos = agrupar_avaliacoes(dados)
+divisor = StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=42)
+proporcao_teste = 1 / divisor.n_splits
+tamanho_alvo = y.value_counts() * proporcao_teste
+
+
+def desvio_do_teste(divisao):
+    _, indices_teste = divisao
+    tamanho_por_classe = y.iloc[indices_teste].value_counts()
+    return tamanho_por_classe.subtract(tamanho_alvo, fill_value=0).abs().sum()
+
+
+# Escolhe a divisão mais próxima de 20% de cada classe, sem avaliar previsões.
+indices_treino, indices_teste = min(
+    divisor.split(X, y, groups=grupos),
+    key=desvio_do_teste,
 )
+X_treino, X_teste = X.iloc[indices_treino], X.iloc[indices_teste]
+y_treino, y_teste = y.iloc[indices_treino], y.iloc[indices_teste]
 
 
 print("\n===== DIVISÃO DOS DADOS =====")
@@ -214,6 +248,10 @@ print(
     f"{acuracia * 100:.2f}%"
 )
 
+classe_majoritaria = y_treino.mode().iloc[0]
+acuracia_majoritaria = y_teste.eq(classe_majoritaria).mean()
+print("Acurácia da classe majoritária:", f"{acuracia_majoritaria * 100:.2f}%")
+
 
 # =========================
 # RELATÓRIO
@@ -308,7 +346,8 @@ for i in range(matriz.shape[0]):
             i,
             matriz[i, j],
             ha="center",
-            va="center"
+            va="center",
+            color="black" if imagem.norm(matriz[i, j]) > 0.55 else "white",
         )
 
 plt.tight_layout()
